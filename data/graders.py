@@ -200,7 +200,20 @@ def red_flag_modifier(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. Composite Reward Functions (one per task)
+# 6. Score Clamping  (hackathon requires strictly open interval (0, 1))
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SCORE_MIN = 0.001
+_SCORE_MAX = 0.999
+
+
+def _clamp(score: float) -> float:
+    """Clamp to strictly open interval (0, 1) as required by the hackathon validator."""
+    return round(max(_SCORE_MIN, min(_SCORE_MAX, score)), 4)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. Composite Reward Functions (one per task)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def compute_task1_reward(
@@ -218,7 +231,7 @@ def compute_task1_reward(
     """
     base = grade_triage_level(predicted_esi, true_esi)
     modifier = red_flag_modifier(predicted_esi, true_esi, red_flags or [])
-    return round(min(1.0, max(0.0, base + modifier)), 4)
+    return _clamp(base + modifier)
 
 
 def compute_task2_reward(
@@ -243,7 +256,7 @@ def compute_task2_reward(
     modifier   = red_flag_modifier(predicted_esi, true_esi, red_flags or [])
 
     raw = 0.60 * esi_score + 0.40 * spec_score + modifier
-    return round(min(1.0, max(0.0, raw)), 4)
+    return _clamp(raw)
 
 
 def compute_task3_reward(
@@ -284,4 +297,4 @@ def compute_task3_reward(
         + 0.15 * eff_score
         + modifier
     )
-    return round(min(1.0, max(0.0, raw)), 4)
+    return _clamp(raw)
