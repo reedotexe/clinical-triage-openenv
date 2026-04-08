@@ -77,6 +77,31 @@ from fastapi.responses import JSONResponse
 router = APIRouter(tags=["info"])
 
 
+@router.get("/", summary="Landing page", include_in_schema=False)
+async def root() -> Dict[str, Any]:
+    """Root endpoint — returns environment overview instead of 404."""
+    return {
+        "name": "clinical_triage",
+        "version": "1.0.0",
+        "description": "Clinical Triage & Medical Decision-Making Environment for RL training",
+        "framework": "OpenEnv (Meta PyTorch Hackathon 2026)",
+        "tasks": ["triage_level", "triage_referral", "full_workup"],
+        "endpoints": {
+            "health":   "GET  /health",
+            "info":     "GET  /info",
+            "schema":   "GET  /schema",
+            "metadata": "GET  /metadata",
+            "reset":    "POST /reset",
+            "step":     "POST /step",
+            "state":    "GET  /state",
+            "docs":     "GET  /docs",
+            "ws":       "WS   /ws",
+        },
+        "space_url": "https://reedhamo-clinical-triage.hf.space",
+        "status": "running",
+    }
+
+
 @router.get("/health", summary="Liveness probe")
 async def health() -> Dict[str, Any]:
     """
