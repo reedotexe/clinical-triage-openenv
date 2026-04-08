@@ -83,7 +83,7 @@ async def root() -> Dict[str, Any]:
     return {
         "name": "clinical_triage",
         "version": "1.0.0",
-        "description": "Clinical Triage & Medical Decision-Making Environment for RL training. This space is our submission for Scaler's Meta Pythorch Openenv Hackathon. Reedham and Mehar (Team Chocolate)",
+        "description": "Clinical Triage & Medical Decision-Making Environment for RL training. This space is our submission for Scaler's Meta PyTorch Openenv Hackathon. Reedham and Mehar (Team Chocolate)",
         "framework": "OpenEnv (Meta PyTorch Hackathon 2026)",
         "tasks": ["triage_level", "triage_referral", "full_workup"],
         "endpoints": {
