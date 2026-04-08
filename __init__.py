@@ -1,16 +1,22 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
-"""Clinical Triage Environment."""
+"""Clinical Triage Environment — public API."""
 
 from .client import ClinicalTriageEnv
-from .models import ClinicalTriageAction, ClinicalTriageObservation
+from .models import (
+    TriageAction,
+    TriageObservation,
+    TriageState,
+    ClinicalTriageAction,       # alias
+    ClinicalTriageObservation,  # alias
+)
 
 __all__ = [
+    # Primary names
+    "TriageAction",
+    "TriageObservation",
+    "TriageState",
+    # Backwards-compat aliases (used by generated client)
     "ClinicalTriageAction",
     "ClinicalTriageObservation",
+    # Client
     "ClinicalTriageEnv",
 ]
