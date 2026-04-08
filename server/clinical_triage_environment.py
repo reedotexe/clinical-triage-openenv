@@ -31,18 +31,26 @@ try:
     from ..data import (
         get_cases,
         get_random_case,
+        get_case_by_id,
         PatientCase,
         AVAILABLE_TESTS,
         is_danger_zone,
+        compute_task1_reward,
+        compute_task2_reward,
+        compute_task3_reward,
     )
 except ImportError:
     from models import TriageAction, TriageObservation, TriageState
     from data import (
         get_cases,
         get_random_case,
+        get_case_by_id,
         PatientCase,
         AVAILABLE_TESTS,
         is_danger_zone,
+        compute_task1_reward,
+        compute_task2_reward,
+        compute_task3_reward,
     )
 
 
@@ -79,88 +87,7 @@ _HIDDEN_VITALS = {"hr", "sbp", "dbp", "rr", "spo2"}
 _ALWAYS_VISIBLE_VITALS = {"temp", "pain"}
 
 
-# ---------------------------------------------------------------------------
-# Reward helpers (inlined here; graders.py will have the full versions)
-# ---------------------------------------------------------------------------
-
-def _grade_esi(predicted: int, true: int) -> float:
-    """
-    Asymmetric ESI grader.
-    Under-triage (predicted > true) is clinically dangerous → heavier penalty.
-    """
-    if predicted == true:
-        return 1.0
-    diff = predicted - true        # positive = under-triage, negative = over-triage
-    if diff > 0:                   # under-triage
-        return max(0.0, 0.3 - 0.15 * (diff - 1))
-    else:                          # over-triage
-        return max(0.0, 0.5 - 0.25 * (abs(diff) - 1))
-
-
-def _grade_specialty(predicted: str, true: str) -> float:
-    try:
-        from data.specialties import specialty_distance
-    except ImportError:
-        try:
-            from ..data.specialties import specialty_distance
-        except ImportError:
-            # Fallback: exact match only
-            return 1.0 if predicted == true else 0.0
-    return specialty_distance(predicted, true)
-
-
-def _grade_diagnosis(predicted: str, true: str, true_category: str) -> float:
-    """Simple category-aware diagnosis grader."""
-    p = predicted.lower().replace(" ", "_")
-    t = true.lower().replace(" ", "_")
-    tc = true_category.lower()
-    if p == t:
-        return 1.0
-    # Same organ system / keyword overlap
-    keywords = set(p.split("_")) & set(t.split("_"))
-    if keywords or tc in p:
-        return 0.5
-    return 0.0
-
-
-def _grade_efficiency(tests_ordered: int, steps_taken: int, max_steps: int) -> float:
-    """Penalise excessive tests and wasted steps."""
-    # Optimal: ≤3 tests, ≤6 steps
-    test_penalty = max(0, tests_ordered - 3) * 0.1
-    step_penalty = max(0, steps_taken - 6) * 0.05
-    return max(0.0, 1.0 - test_penalty - step_penalty)
-
-
-def _compute_task1_reward(predicted_esi: int, true_esi: int) -> float:
-    return _grade_esi(predicted_esi, true_esi)
-
-
-def _compute_task2_reward(
-    predicted_esi: int, true_esi: int,
-    predicted_specialty: str, true_specialty: str,
-) -> float:
-    esi_score = _grade_esi(predicted_esi, true_esi)
-    spec_score = _grade_specialty(predicted_specialty, true_specialty)
-    return round(0.6 * esi_score + 0.4 * spec_score, 4)
-
-
-def _compute_task3_reward(
-    predicted_esi: int, true_esi: int,
-    predicted_specialty: str, true_specialty: str,
-    predicted_diagnosis: str, true_diagnosis: str, true_category: str,
-    tests_ordered: int, steps_taken: int, max_steps: int,
-) -> float:
-    esi_score  = _grade_esi(predicted_esi, true_esi)
-    spec_score = _grade_specialty(predicted_specialty, true_specialty)
-    dx_score   = _grade_diagnosis(predicted_diagnosis, true_diagnosis, true_category)
-    eff_score  = _grade_efficiency(tests_ordered, steps_taken, max_steps)
-    return round(
-        0.35 * esi_score
-        + 0.25 * spec_score
-        + 0.25 * dx_score
-        + 0.15 * eff_score,
-        4,
-    )
+# Inlined grader fns removed — now imported from data.graders
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +147,6 @@ class ClinicalTriageEnvironment(Environment):
         # Sample (or force) a patient case
         case_id = kwargs.get("case_id")
         if case_id:
-            from data import get_case_by_id
             try:
                 case = get_case_by_id(str(case_id))
             except KeyError:
@@ -327,7 +253,7 @@ class ClinicalTriageEnvironment(Environment):
         case = self._case
         predicted = action.triage_level
         true = case.true_esi_level
-        reward = _compute_task1_reward(predicted, true)
+        reward = compute_task1_reward(predicted, true, self._case.red_flags)
         self._state.is_finalized = True
 
         if predicted == true:
@@ -354,7 +280,7 @@ class ClinicalTriageEnvironment(Environment):
         true_esi = case.true_esi_level
         true_spec = case.true_specialty
 
-        reward = _compute_task2_reward(pred_esi, true_esi, pred_spec, true_spec)
+        reward = compute_task2_reward(pred_esi, true_esi, pred_spec, true_spec, self._case.red_flags)
         self._state.is_finalized = True
 
         esi_ok = "✓" if pred_esi == true_esi else f"✗ (true={true_esi})"
@@ -444,14 +370,15 @@ class ClinicalTriageEnvironment(Environment):
         pred_spec = action.specialty
         pred_dx   = action.diagnosis
 
-        reward = _compute_task3_reward(
-            predicted_esi=pred_esi,       true_esi=case.true_esi_level,
+        reward = compute_task3_reward(
+            predicted_esi=pred_esi,        true_esi=case.true_esi_level,
             predicted_specialty=pred_spec, true_specialty=case.true_specialty,
             predicted_diagnosis=pred_dx,   true_diagnosis=case.true_diagnosis,
-            true_category=case.true_diagnosis_category,
+            true_diagnosis_category=case.true_diagnosis_category,
             tests_ordered=self._state.tests_ordered,
             steps_taken=self._state.step_count,
             max_steps=self._state.max_steps,
+            red_flags=case.red_flags,
         )
         self._state.is_finalized = True
 

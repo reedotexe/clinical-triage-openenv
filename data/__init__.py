@@ -2,14 +2,23 @@
 Clinical Triage Data Package.
 
 Exports:
-  - PatientCase: dataclass for a single synthetic patient
-  - get_cases(difficulty): returns list of cases for a given difficulty
-  - ALL_CASES, EASY_CASES, MEDIUM_CASES, HARD_CASES
-  - SPECIALTIES, ADJACENT_SPECIALTIES, AVAILABLE_TESTS, ESI_DANGER_ZONE
-  - is_danger_zone, specialty_distance
+  - PatientCase + case helpers
+  - Specialty constants + distance function
+  - Grader functions (grade_triage_level, grade_referral, etc.)
+  - Composite reward functions (compute_task1/2/3_reward)
 """
 
-from .cases import PatientCase, get_cases, get_case_by_id, get_random_case, validate_cases, ALL_CASES, EASY_CASES, MEDIUM_CASES, HARD_CASES
+from .cases import (
+    PatientCase,
+    get_cases,
+    get_case_by_id,
+    get_random_case,
+    validate_cases,
+    ALL_CASES,
+    EASY_CASES,
+    MEDIUM_CASES,
+    HARD_CASES,
+)
 from .specialties import (
     SPECIALTIES,
     ADJACENT_SPECIALTIES,
@@ -18,21 +27,26 @@ from .specialties import (
     is_danger_zone,
     specialty_distance,
 )
+from .graders import (
+    grade_triage_level,
+    grade_referral,
+    grade_diagnosis,
+    grade_efficiency,
+    red_flag_modifier,
+    compute_task1_reward,
+    compute_task2_reward,
+    compute_task3_reward,
+)
 
 __all__ = [
-    "PatientCase",
-    "get_cases",
-    "get_case_by_id",
-    "get_random_case",
-    "validate_cases",
-    "ALL_CASES",
-    "EASY_CASES",
-    "MEDIUM_CASES",
-    "HARD_CASES",
-    "SPECIALTIES",
-    "ADJACENT_SPECIALTIES",
-    "AVAILABLE_TESTS",
-    "ESI_DANGER_ZONE",
-    "is_danger_zone",
-    "specialty_distance",
+    # Cases
+    "PatientCase", "get_cases", "get_case_by_id", "get_random_case",
+    "validate_cases", "ALL_CASES", "EASY_CASES", "MEDIUM_CASES", "HARD_CASES",
+    # Specialties
+    "SPECIALTIES", "ADJACENT_SPECIALTIES", "AVAILABLE_TESTS",
+    "ESI_DANGER_ZONE", "is_danger_zone", "specialty_distance",
+    # Graders
+    "grade_triage_level", "grade_referral", "grade_diagnosis",
+    "grade_efficiency", "red_flag_modifier",
+    "compute_task1_reward", "compute_task2_reward", "compute_task3_reward",
 ]
