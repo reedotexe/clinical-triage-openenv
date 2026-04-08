@@ -1,10 +1,10 @@
 """
 Synthetic Patient Case Bank for Clinical Triage Environment.
 
-60 handcrafted cases across 3 difficulty levels:
-  - 20 Easy  : obvious presentations (clear ESI, direct triage)
-  - 20 Medium: require reasoning for BOTH triage + specialty
-  - 20 Hard  : sparse initial info; agent must request vitals/tests (Task 3)
+100 handcrafted cases across 3 difficulty levels:
+  - 30 Easy  : obvious presentations (clear ESI, direct triage)
+  - 30 Medium: require reasoning for BOTH triage + specialty
+  - 40 Hard  : sparse initial info; agent must request vitals/tests (Task 3)
 
 All cases are purely synthetic — no real patient data.
 """
@@ -13,9 +13,15 @@ from __future__ import annotations
 import random
 from typing import Dict, List, Literal, Optional
 
-from .cases_easy import PatientCase, EASY_CASES
-from .cases_medium import MEDIUM_CASES
-from .cases_hard import HARD_CASES
+from .cases_easy import PatientCase, EASY_CASES as _EASY_BASE
+from .cases_medium import MEDIUM_CASES as _MEDIUM_BASE
+from .cases_hard import HARD_CASES as _HARD_BASE
+from .cases_extra import EXTRA_EASY_CASES, EXTRA_MEDIUM_CASES, EXTRA_HARD_CASES
+
+# Merged difficulty pools (30 / 30 / 40 = 100 total)
+EASY_CASES: List[PatientCase] = _EASY_BASE + EXTRA_EASY_CASES
+MEDIUM_CASES: List[PatientCase] = _MEDIUM_BASE + EXTRA_MEDIUM_CASES
+HARD_CASES: List[PatientCase] = _HARD_BASE + EXTRA_HARD_CASES
 
 # Re-export PatientCase so importers only need `from data.cases import ...`
 __all__ = [

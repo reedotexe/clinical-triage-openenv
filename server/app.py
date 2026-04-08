@@ -1,84 +1,186 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
 """
 FastAPI application for the Clinical Triage Environment.
 
-This module creates an HTTP server that exposes the ClinicalTriageEnvironment
-over HTTP and WebSocket endpoints, compatible with EnvClient.
+Exposes the ClinicalTriageEnvironment over HTTP and WebSocket endpoints,
+compatible with EnvClient, following the OpenEnv server standard.
 
-Endpoints:
-    - POST /reset: Reset the environment
-    - POST /step: Execute an action
-    - GET /state: Get current environment state
-    - GET /schema: Get action/observation schemas
-    - WS /ws: WebSocket endpoint for persistent sessions
+Standard endpoints (provided by create_app):
+    POST /reset      — Reset the environment (accepts task, seed, case_id)
+    POST /step       — Execute an action
+    GET  /state      — Get current episode state
+    GET  /schema     — Action + observation JSON schemas
+    WS   /ws         — WebSocket for persistent sessions
+
+Additional endpoints added here:
+    GET  /health     — Lightweight liveness probe for Docker/k8s
+    GET  /info       — Environment metadata (tasks, case stats, specialties)
 
 Usage:
-    # Development (with auto-reload):
+    # Development (inside clinical_triage/):
     uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 
-    # Production:
-    uvicorn server.app:app --host 0.0.0.0 --port 8000 --workers 4
+    # Via uv:
+    uv run --project . server
 
-    # Or run directly:
+    # Direct:
     python -m server.app
+    python -m server.app --port 8001
 """
+
+from __future__ import annotations
+
+import os
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 try:
     from openenv.core.env_server.http_server import create_app
 except Exception as e:  # pragma: no cover
     raise ImportError(
-        "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
+        "openenv-core is required. Install with:\n    uv sync\n"
     ) from e
 
+# ------------------------------------------------------------------
+# Import our environment and models (package-relative or bare-module
+# fallback for running with  python -m server.app inside clinical_triage/)
+# ------------------------------------------------------------------
 try:
-    from ..models import ClinicalTriageAction, ClinicalTriageObservation
+    from ..models import TriageAction, TriageObservation, TriageState
+    from ..data import ALL_CASES, SPECIALTIES
     from .clinical_triage_environment import ClinicalTriageEnvironment
-except ModuleNotFoundError:
-    from models import ClinicalTriageAction, ClinicalTriageObservation
-    from server.clinical_triage_environment import ClinicalTriageEnvironment
+except (ImportError, ModuleNotFoundError):
+    from models import TriageAction, TriageObservation, TriageState   # type: ignore
+    from data import ALL_CASES, SPECIALTIES                           # type: ignore
+    from server.clinical_triage_environment import ClinicalTriageEnvironment  # type: ignore
 
 
-# Create the app with web interface and README integration
+# ------------------------------------------------------------------
+# Core FastAPI app (all standard OpenEnv endpoints)
+# ------------------------------------------------------------------
+_MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_ENVS", "4"))
+
 app = create_app(
     ClinicalTriageEnvironment,
-    ClinicalTriageAction,
-    ClinicalTriageObservation,
+    TriageAction,
+    TriageObservation,
     env_name="clinical_triage",
-    max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+    max_concurrent_envs=_MAX_CONCURRENT,
 )
 
 
-def main(host: str = "0.0.0.0", port: int = 8000):
+# ------------------------------------------------------------------
+# Additional custom endpoints
+# ------------------------------------------------------------------
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+router = APIRouter(tags=["info"])
+
+
+@router.get("/health", summary="Liveness probe")
+async def health() -> Dict[str, Any]:
     """
-    Entry point for direct execution via uv run or python -m.
+    Lightweight health check for Docker and orchestration platforms.
+    Returns HTTP 200 when the server is ready to accept requests.
+    """
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "env": "clinical_triage",
+        "max_concurrent_envs": _MAX_CONCURRENT,
+    }
 
-    This function enables running the server without Docker:
+
+@router.get("/info", summary="Environment metadata")
+async def info() -> Dict[str, Any]:
+    """
+    Return metadata about the clinical triage environment:
+    tasks, case bank stats, and supported specialties.
+    Useful for building inference scripts and dashboards.
+    """
+    from collections import Counter
+
+    esi_dist = dict(sorted(Counter(c.true_esi_level for c in ALL_CASES).items()))
+    diff_dist = dict(Counter(c.difficulty for c in ALL_CASES))
+
+    return {
+        "env_name": "clinical_triage",
+        "version": "1.0.0",
+        "description": (
+            "A clinical triage and medical decision-making environment "
+            "for RL/LLM agent training and evaluation."
+        ),
+        "tasks": {
+            "triage_level": {
+                "description": "Assign ESI triage level (1–5). Single-step.",
+                "max_steps": 1,
+                "difficulty": "easy",
+                "valid_actions": ["ASSIGN_TRIAGE"],
+            },
+            "triage_referral": {
+                "description": "Assign ESI level + referral specialty. Single-step.",
+                "max_steps": 1,
+                "difficulty": "medium",
+                "valid_actions": ["ASSIGN_TRIAGE_REFERRAL"],
+            },
+            "full_workup": {
+                "description": (
+                    "Multi-step workup: request vitals/exam/tests then FINALIZE."
+                ),
+                "max_steps": 10,
+                "difficulty": "hard",
+                "valid_actions": [
+                    "REQUEST_VITAL", "REQUEST_EXAM", "ORDER_TEST", "FINALIZE"
+                ],
+            },
+        },
+        "case_bank": {
+            "total": len(ALL_CASES),
+            "by_difficulty": diff_dist,
+            "by_esi_level": esi_dist,
+        },
+        "specialties": sorted(SPECIALTIES),
+        "reward_weights": {
+            "task1": {"esi": 1.0},
+            "task2": {"esi": 0.6, "specialty": 0.4},
+            "task3": {"esi": 0.35, "specialty": 0.25, "diagnosis": 0.25, "efficiency": 0.15},
+        },
+        "reset_params": {
+            "task": "triage_level | triage_referral | full_workup",
+            "seed": "int (optional) — for reproducibility",
+            "case_id": "str (optional) — force a specific case",
+        },
+    }
+
+
+# Register additional routes onto the app
+app.include_router(router)
+
+
+# ------------------------------------------------------------------
+# Entry points
+# ------------------------------------------------------------------
+
+def main(host: str = "0.0.0.0", port: int = 8000) -> None:
+    """
+    Start the server with uvicorn.
+
+    Can be invoked via:
         uv run --project . server
-        uv run --project . server --port 8001
-        python -m clinical_triage.server.app
-
-    Args:
-        host: Host address to bind to (default: "0.0.0.0")
-        port: Port number to listen on (default: 8000)
-
-    For production deployments, consider using uvicorn directly with
-    multiple workers:
-        uvicorn clinical_triage.server.app:app --workers 4
+        python -m server.app
+        python -m server.app --port 8001
     """
     import uvicorn
-
     uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8000)
+    parser = argparse.ArgumentParser(
+        description="Clinical Triage Environment Server"
+    )
+    parser.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
+    parser.add_argument("--port", type=int, default=8000, help="Listen port (default: 8000)")
     args = parser.parse_args()
-    main(port=args.port)
+    main(host=args.host, port=args.port)

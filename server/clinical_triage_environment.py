@@ -19,12 +19,13 @@ Implements the OpenEnv Environment interface for all 3 tasks:
 
 from __future__ import annotations
 
+import os
 import random
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from openenv.core.env_server.interfaces import Environment
-from openenv.core.env_server.types import State
+from openenv.core.env_server.types import EnvironmentMetadata, State
 
 try:
     from ..models import TriageAction, TriageObservation, TriageState
@@ -121,6 +122,27 @@ class ClinicalTriageEnvironment(Environment):
         self._revealed_exam: Dict[str, str] = {}
         self._revealed_tests: Dict[str, str] = {}
         self._rng: random.Random = random.Random()
+
+    def get_metadata(self) -> EnvironmentMetadata:
+        readme: Optional[str] = None
+        for candidate in (
+            os.path.join(os.path.dirname(__file__), "..", "README.md"),
+            os.path.join(os.path.dirname(__file__), "README.md"),
+            "README.md",
+        ):
+            try:
+                with open(os.path.abspath(candidate), encoding="utf-8") as fh:
+                    readme = fh.read()
+                break
+            except OSError:
+                pass
+        return EnvironmentMetadata(
+            name="clinical_triage",
+            description="Clinical Triage & Medical Decision-Making Environment for RL training",
+            version="1.0.0",
+            author="Team Chocolate — Reedham & Meharpreet",
+            readme_content=readme,
+        )
 
     # ── reset ────────────────────────────────────────────────────────────────
 

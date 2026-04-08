@@ -1,7 +1,14 @@
 spec_version: 1
 name: clinical_triage
+version: "1.0.0"
+description: "Clinical Triage & Medical Decision-Making Environment for RL training"
 type: space
 runtime: fastapi
 app: server.app:app
 port: 8000
-
+tags:
+  - openenv
+  - healthcare
+  - triage
+  - clinical-decision-support
+  - reinforcement-learning
